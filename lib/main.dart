@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'chat_room_screen.dart';
+import 'login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,11 +24,7 @@ class MyApp extends StatelessWidget {
     return const MaterialApp(
       title: 'Chat App',
       debugShowCheckedModeBanner: false,
-     home: ChatRoomScreen(
-        chatId: "general_room",
-        currentUserId: "user_test_2",
-      
-      ),
+      home: LoginScreen(),
     );
   }
 }
