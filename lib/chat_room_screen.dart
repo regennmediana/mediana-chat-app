@@ -35,7 +35,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
-  // --- 1. Dialog to update room name in Firestore ---
+  // Dialog to update room name in Firestore
   Future<void> _showEditRoomNameDialog(String currentName) async {
     final controller = TextEditingController(text: currentName);
 
@@ -66,7 +66,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               onPressed: () async {
                 final newName = controller.text.trim();
                 if (newName.isNotEmpty) {
-                  // Updates document 'name' field in 'chats' collection
                   await FirebaseFirestore.instance
                       .collection('chats')
                       .doc(widget.chatId)
@@ -86,13 +85,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Telegram Theme Background Color
       backgroundColor: const Color(0xFF0E1621),
       appBar: AppBar(
         backgroundColor: const Color(0xFF17212B),
         elevation: 1,
         titleSpacing: 0,
-        // --- 2. Real-time dynamic header stream ---
         title: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
               .collection('chats')
@@ -101,6 +98,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           builder: (context, snapshot) {
             final chatData = snapshot.data?.data() as Map<String, dynamic>?;
             final roomName = chatData?['name'] ?? 'General Room';
+            final List members = chatData?['members'] ?? [];
+            final int memberCount = members.length;
             final avatarInitial = roomName.isNotEmpty ? roomName[0].toUpperCase() : 'G';
 
             return InkWell(
@@ -128,9 +127,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                           const Icon(Icons.edit, size: 14, color: Color(0xFF7F91A4)),
                         ],
                       ),
-                      const Text(
-                        '2 members, online',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF7F91A4)),
+                      Text(
+                        '$memberCount ${memberCount == 1 ? "member" : "members"}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF7F91A4)),
                       ),
                     ],
                   ),
@@ -146,7 +145,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
       body: Column(
         children: [
-          // Message List Stream
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -202,8 +200,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               },
             ),
           ),
-
-          // Telegram Style Floating Input Bar
           Container(
             color: const Color(0xFF17212B),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
