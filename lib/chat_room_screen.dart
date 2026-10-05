@@ -1,5 +1,8 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String chatId;
@@ -17,6 +20,7 @@ class ChatRoomScreen extends StatefulWidget {
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
+  bool _isUploading = false;
 
   void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
@@ -31,11 +35,57 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         .add({
       'senderId': widget.currentUserId,
       'text': text,
+      'imageUrl': null,
       'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
-  // Dialog to update room name in Firestore
+  Future<void> _pickAndUploadImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final Uint8List imageBytes = await image.readAsBytes();
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final Reference ref = FirebaseStorage.instance
+          .ref()
+          .child('chat_images')
+          .child(widget.chatId)
+          .child(fileName);
+
+      final UploadTask uploadTask = ref.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      final TaskSnapshot snapshot = await uploadTask;
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .collection('messages')
+          .add({
+        'senderId': widget.currentUserId,
+        'text': null,
+        'imageUrl': downloadUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
   Future<void> _showEditRoomNameDialog(String currentName) async {
     final controller = TextEditingController(text: currentName);
 
@@ -138,13 +188,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             );
           },
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.search, color: Color(0xFF7F91A4)), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_vert, color: Color(0xFF7F91A4)), onPressed: () {}),
-        ],
       ),
       body: Column(
         children: [
+          if (_isUploading)
+            const LinearProgressIndicator(backgroundColor: Color(0xFF17212B), color: Color(0xFF5288C1)),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -170,13 +218,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   itemBuilder: (context, index) {
                     final data = docs[index].data() as Map<String, dynamic>;
                     final bool isMe = data['senderId'] == widget.currentUserId;
-                    final String text = data['text'] ?? '';
+                    final String? text = data['text'];
+                    final String? imageUrl = data['imageUrl'];
 
                     return Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         constraints: BoxConstraints(
                           maxWidth: MediaQuery.of(context).size.width * 0.75,
                         ),
@@ -189,10 +238,25 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                             bottomRight: Radius.circular(isMe ? 4 : 16),
                           ),
                         ),
-                        child: Text(
-                          text,
-                          style: const TextStyle(color: Colors.white, fontSize: 15),
-                        ),
+                        child: imageUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return const Padding(
+                                      padding: EdgeInsets.all(20.0),
+                                      child: CircularProgressIndicator(),
+                                    );
+                                  },
+                                ),
+                              )
+                            : Text(
+                                text ?? '',
+                                style: const TextStyle(color: Colors.white, fontSize: 15),
+                              ),
                       ),
                     );
                   },
@@ -207,8 +271,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.sentiment_satisfied_alt, color: Color(0xFF7F91A4)),
-                    onPressed: () {},
+                    icon: const Icon(Icons.attach_file, color: Color(0xFF7F91A4)),
+                    onPressed: _pickAndUploadImage,
                   ),
                   Expanded(
                     child: TextField(
@@ -220,10 +284,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         border: InputBorder.none,
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.attach_file, color: Color(0xFF7F91A4)),
-                    onPressed: () {},
                   ),
                   IconButton(
                     icon: const Icon(Icons.send, color: Color(0xFF5288C1)),
