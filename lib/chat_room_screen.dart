@@ -35,6 +35,54 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
+  // --- 1. Dialog to update room name in Firestore ---
+  Future<void> _showEditRoomNameDialog(String currentName) async {
+    final controller = TextEditingController(text: currentName);
+
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF17212B),
+          title: const Text('Edit Room Name', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Enter new room name',
+              hintStyle: TextStyle(color: Color(0xFF7F91A4)),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF5288C1)),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF7F91A4))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5288C1)),
+              onPressed: () async {
+                final newName = controller.text.trim();
+                if (newName.isNotEmpty) {
+                  // Updates document 'name' field in 'chats' collection
+                  await FirebaseFirestore.instance
+                      .collection('chats')
+                      .doc(widget.chatId)
+                      .set({'name': newName}, SetOptions(merge: true));
+
+                  if (mounted) Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -44,30 +92,52 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         backgroundColor: const Color(0xFF17212B),
         elevation: 1,
         titleSpacing: 0,
-        title: Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Color(0xFF5288C1),
-              child: Text(
-                'GR',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        // --- 2. Real-time dynamic header stream ---
+        title: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('chats')
+              .doc(widget.chatId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            final chatData = snapshot.data?.data() as Map<String, dynamic>?;
+            final roomName = chatData?['name'] ?? 'General Room';
+            final avatarInitial = roomName.isNotEmpty ? roomName[0].toUpperCase() : 'G';
+
+            return InkWell(
+              onTap: () => _showEditRoomNameDialog(roomName),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: const Color(0xFF5288C1),
+                    child: Text(
+                      avatarInitial,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            roomName,
+                            style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.edit, size: 14, color: Color(0xFF7F91A4)),
+                        ],
+                      ),
+                      const Text(
+                        '2 members, online',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF7F91A4)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'General Room',
-                  style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '2 members, online',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF7F91A4)),
-                ),
-              ],
-            ),
-          ],
+            );
+          },
         ),
         actions: [
           IconButton(icon: const Icon(Icons.search, color: Color(0xFF7F91A4)), onPressed: () {}),
